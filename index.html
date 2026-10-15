@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token 计算器 · 精确分词与 API 成本估算</title>
+<meta name="description" content="离线精确统计文本 token 数（DeepSeek / Qwen / OpenAI 官方词表），可视化 token 切分，并估算 API 调用成本。">
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+
+<!-- 加载遮罩 -->
+<div id="boot">
+  <div class="ring"></div>
+  <div>
+    <div style="font-weight:600">正在加载词表…</div>
+    <div class="faint" style="font-size:12.5px;margin-top:4px">
+      首次加载约 3.9&nbsp;MB（gzip 后），之后浏览器会缓存
+    </div>
+  </div>
+</div>
+
+<!-- 顶部栏 -->
+<header class="topbar">
+  <div class="brand">
+    <h1>Token 计算器</h1>
+    <span class="tag">精确分词 · 非估算</span>
+  </div>
+  <div class="spacer"></div>
+  <span class="faint" id="engineInfo" style="font-size:12.5px">正在加载…</span>
+  <button class="btn ghost sm" id="themeBtn" type="button">☀️ 浅色</button>
+  <button class="btn ghost sm" id="resetAll" type="button">恢复默认</button>
+</header>
+
+<main class="layout">
+
+  <!-- ============ 左栏 ============ -->
+  <div class="col">
+
+    <!-- 输入 -->
+    <section class="card">
+      <header>
+        <h2>输入文本</h2>
+        <span class="sub hidden" id="hlNote"></span>
+        <div class="spacer"></div>
+        <select id="encSelect" style="width:auto;min-width:170px" title="选择分词器">
+          <option value="deepseek">DeepSeek 词表</option>
+          <option value="qwen">Qwen 词表</option>
+          <option value="qwen38">Qwen3.8 词表</option>
+          <option value="glm">GLM 词表</option>
+          <option value="o200k">OpenAI o200k</option>
+          <option value="cl100k">OpenAI cl100k</option>
+        </select>
+      </header>
+
+      <div class="editor-wrap" id="editorWrap">
+        <textarea id="editor" class="editor" spellcheck="false"
+          placeholder="在此粘贴或输入文本…（也可以直接把 .txt / .md / 代码文件拖进来）"
+          aria-label="待统计文本"></textarea>
+        <div class="highlight" id="highlight" aria-hidden="true"><div id="hlInner"></div></div>
+      </div>
+
+      <div class="body hidden" id="rawNote" style="padding-bottom:0"></div>
+
+      <div class="toolbar">
+        <button class="btn primary sm" id="hlToggle" type="button">隐藏 token 颜色</button>
+        <div class="chips">
+          <span class="faint" style="font-size:12px;align-self:center">示例：</span>
+          <button class="chip" type="button" data-sample="zh">中文</button>
+          <button class="chip" type="button" data-sample="en">英文</button>
+          <button class="chip" type="button" data-sample="mixed">中英混合</button>
+          <button class="chip" type="button" data-sample="code">代码</button>
+          <button class="chip" type="button" data-sample="emoji">Emoji</button>
+        </div>
+        <div class="spacer grow"></div>
+        <button class="btn sm ghost" id="clearBtn" type="button">清空</button>
+        <button class="btn sm ghost" id="copyBtn" type="button">复制报告</button>
+      </div>
+    </section>
+
+    <!-- 统计 -->
+    <section class="card">
+      <header>
+        <h2>统计结果</h2>
+        <span class="sub">与官方 tokenizer 逐 token 比对一致</span>
+      </header>
+      <div class="body">
+        <div class="stats" id="stats"></div>
+      </div>
+    </section>
+
+    <!-- token 明细 -->
+    <section class="card">
+      <header>
+        <h2>Token 明细</h2>
+        <span class="sub" id="breakdownMeta"></span>
+      </header>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="num" style="width:78px">ID</th>
+              <th>Token（空格=␣ 制表=⇥ 换行=⏎）</th>
+              <th class="num" style="width:72px">次数</th>
+              <th class="num" style="width:72px">占比</th>
+              <th style="width:110px">分布</th>
+            </tr>
+          </thead>
+          <tbody id="breakdownBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 模型对比 -->
+    <section class="card">
+      <header>
+        <h2>各模型成本对比</h2>
+        <span class="sub" id="modelMeta"></span>
+        <div class="spacer"></div>
+        <input type="text" id="modelFilter" placeholder="筛选模型…" style="width:150px">
+        <button class="btn sm" id="exportBtn" type="button">导出 CSV</button>
+      </header>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th>模型</th>
+              <th class="num">上下文</th>
+              <th class="num">输入 token</th>
+              <th class="num">输入 $/1M</th>
+              <th class="num">输出 $/1M</th>
+              <th class="num">单次成本</th>
+              <th class="center">操作</th>
+            </tr>
+          </thead>
+          <tbody id="modelBody"></tbody>
+        </table>
+      </div>
+      <div class="body" style="padding-top:12px">
+        <div class="hint">
+          成本 = 输入 token × 输入价 + 输出 token × 输出价；表格按单次成本升序。
+          带 <b>*</b> 的模型表示价格已被手动修改。价格为人工整理，请以厂商官网为准。
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ 右栏 ============ -->
+  <div class="col">
+
+    <!-- 分词器 -->
+    <section class="card">
+      <header><h2>分词器</h2></header>
+      <div class="body">
+        <div class="chips" style="margin-bottom:10px">
+          <button class="chip" type="button" data-enc="deepseek">DeepSeek</button>
+          <button class="chip" type="button" data-enc="qwen">Qwen</button>
+          <button class="chip" type="button" data-enc="qwen38">Qwen3.8</button>
+          <button class="chip" type="button" data-enc="glm">GLM</button>
+          <button class="chip" type="button" data-enc="o200k">OpenAI o200k</button>
+          <button class="chip" type="button" data-enc="cl100k">OpenAI cl100k</button>
+        </div>
+        <div class="hint">
+          六套词表都内嵌在页面里，文本不会上传到任何服务器。
+          分词结果与 HF <span class="mono">tokenizers</span> / OpenAI
+          <span class="mono">tiktoken</span> 完全一致。
+        </div>
+      </div>
+    </section>
+
+    <!-- 模型与价格 -->
+    <section class="card">
+      <header>
+        <h2>模型与价格</h2>
+        <span class="pill warn hidden" id="customBadge">已自定义</span>
+        <div class="spacer"></div>
+        <label class="hint nowrap hidden" id="offPeakWrap" style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="checkbox" id="offPeak" style="width:auto"> 空闲时段（半价）
+        </label>
+      </header>
+      <div class="body">
+        <div class="field" style="margin-bottom:10px">
+          <label>当前模型</label>
+          <select id="modelSelect"></select>
+        </div>
+
+        <div class="split-two">
+          <div class="field">
+            <label>输入价（$ / 1M token）</label>
+            <input type="number" id="priceIn" step="0.001" min="0">
+          </div>
+          <div class="field">
+            <label>输出价（$ / 1M token）</label>
+            <input type="number" id="priceOut" step="0.001" min="0">
+          </div>
+          <div class="field">
+            <label>缓存命中价（$ / 1M）</label>
+            <input type="number" id="priceCache" step="0.001" min="0">
+          </div>
+          <div class="field">
+            <label>上下文窗口（token）</label>
+            <input type="number" id="modelCtx" step="1000" min="1">
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <button class="btn sm ghost" id="resetPrice" type="button">恢复该模型默认价</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 成本估算 -->
+    <section class="card" id="costCard">
+      <header>
+        <h2>成本估算</h2>
+        <span class="sub" id="costModel"></span>
+      </header>
+      <div class="body">
+        <div class="stats" id="costSummary" style="margin-bottom:14px"></div>
+
+        <div class="row">
+          <div class="field" style="flex:1 1 150px">
+            <label>预计输出 token</label>
+            <input type="number" id="outputTokens" min="0" step="50">
+          </div>
+          <div class="field" style="flex:2 1 200px">
+            <label>快速调整</label>
+            <input type="range" id="outputRange" min="0" max="8000" step="50" style="width:100%">
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <div class="field" style="flex:1 1 140px">
+            <label>调用次数</label>
+            <input type="number" id="calls" min="1" step="1" value="1">
+          </div>
+          <div class="field" style="flex:1 1 140px">
+            <label>汇率 1 USD = <span id="rateVal">7.1</span> CNY</label>
+            <input type="number" id="rate" min="0.01" step="0.1">
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:10px">
+          <label>缓存命中率：<b id="cacheHitVal">0%</b></label>
+          <input type="range" id="cacheHit" min="0" max="100" step="5" style="width:100%">
+        </div>
+
+        <div class="tablewrap" style="margin-top:12px;max-height:none">
+          <table>
+            <thead>
+              <tr>
+                <th>项目</th>
+                <th class="num">token</th>
+                <th class="num">单价/1M</th>
+                <th class="num">USD</th>
+                <th class="num">CNY</th>
+              </tr>
+            </thead>
+            <tbody id="costBody"></tbody>
+          </table>
+        </div>
+        <div class="hint" id="costCurrencyNote" style="margin-top:8px"></div>
+      </div>
+    </section>
+
+    <!-- 上下文 -->
+    <section class="card">
+      <header><h2>上下文占用</h2></header>
+      <div class="body">
+        <div class="meter"><i id="ctxMeter"></i></div>
+        <div id="ctxInfo" style="margin-top:10px"></div>
+      </div>
+    </section>
+
+    <!-- 自定义模型 -->
+    <section class="card">
+      <header><h2>添加自定义模型</h2></header>
+      <div class="body">
+        <div class="row">
+          <div class="field" style="flex:2 1 140px">
+            <label>模型名称</label>
+            <input type="text" id="nmLabel" placeholder="例如 my-model-v1">
+          </div>
+          <div class="field" style="flex:1 1 100px">
+            <label>厂商</label>
+            <input type="text" id="nmVendor" placeholder="厂商">
+          </div>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>使用分词器</label>
+          <select id="nmEncoding">
+            <option value="deepseek">DeepSeek 词表</option>
+            <option value="qwen">Qwen 词表</option>
+            <option value="qwen38">Qwen3.8 词表</option>
+            <option value="glm">GLM 词表</option>
+            <option value="o200k">OpenAI o200k</option>
+            <option value="cl100k">OpenAI cl100k</option>
+          </select>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="field"><label>输入 $/1M</label><input type="number" id="nmIn" step="0.01" value="1" min="0"></div>
+          <div class="field"><label>输出 $/1M</label><input type="number" id="nmOut" step="0.01" value="3" min="0"></div>
+          <div class="field"><label>缓存 $/1M</label><input type="number" id="nmCache" step="0.01" value="0.1" min="0"></div>
+          <div class="field"><label>上下文</label><input type="number" id="nmCtx" step="1000" value="128000" min="1"></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn primary sm" id="addModelBtn" type="button">添加并使用</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <header><h2>说明</h2></header>
+      <div class="body hint" style="line-height:1.85">
+        <b>关于精确性</b>：本工具内置的是各厂商<b>真实的 BPE 词表</b>（DeepSeek、Qwen、
+        Qwen3.8、GLM、OpenAI o200k / cl100k），按官方预切分正则 + 字节级 BPE 合并，
+        结果与官方分词器逐 token 一致（已用 7400+ 条中英日韩、emoji、组合字符、
+        代码、空白等语料与官方库比对通过）。<br><br>
+        <b>关于换行符</b>：输入框（浏览器 textarea）会把 <span class="mono">\r\n</span> 与
+        <span class="mono">\r</span> 统一成 <span class="mono">\n</span>，这会让 token 数略有差异。
+        拖入含 CR 的文件时页面会单独提示原始字节下的真实计数。<br><br>
+        <b>关于价格</b>：价格整理于 2026-10，以厂商官方定价页为主、LiteLLM 公开价目表
+        交叉核对；厂商随时调价下线，请以官网为准。存在缓存计价的模型会单独列出
+        「命中缓存」一行。DeepSeek 有<b>空闲时段半价</b>，页面上可切换。<br><br>
+        <b>关于隐私</b>：全部计算都在您的浏览器本地完成，文本不会发送到网络。
+      </div>
+    </section>
+  </div>
+</main>
+
+<script src="src/encoder.js"></script>
+<script src="src/models.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+# 默认按文本处理，提交时统一存为 LF，检出时保持 LF
+* text=auto eol=lf
+
+# 内嵌词表数据是单行 base64，绝不能做换行符转换（否则会破坏数据）
+build/tokenizer_data.b64 -text -diff
+
+# 二进制资源
+*.png binary
+*.zip binary

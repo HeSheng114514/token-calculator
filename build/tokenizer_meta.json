@@ -1,0 +1,38 @@
+{
+  "deepseek": {
+    "count": 127997,
+    "idOffset": 3,
+    "tokens": 127997,
+    "specials": 818
+  },
+  "qwen": {
+    "count": 151643,
+    "idOffset": 0,
+    "tokens": 151643,
+    "specials": 22
+  },
+  "qwen38": {
+    "count": 248044,
+    "idOffset": 0,
+    "tokens": 247843,
+    "specials": 33
+  },
+  "glm": {
+    "count": 154820,
+    "idOffset": 0,
+    "tokens": 154820,
+    "specials": 36
+  },
+  "cl100k": {
+    "count": 100256,
+    "idOffset": 0,
+    "tokens": 100256,
+    "specials": 5
+  },
+  "o200k": {
+    "count": 199998,
+    "idOffset": 0,
+    "tokens": 199998,
+    "specials": 7
+  }
+}
